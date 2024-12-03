@@ -1,0 +1,30 @@
+name: BetterTPLogin
+version: '1.0-SNAPSHOT'
+main: org.blueobsidian.betterTPLogin.BetterTPLogin
+api-version: '1.21'
+
+
+permissions:
+    login:
+        description: Allows the player to login to the server
+    register:
+        description: Allows the player to register a new account
+    setspawn:
+      default: op
+      description: Allows the player to set the spawn location
+
+
+commands:
+  login:
+    description: Log in to the server.
+    usage: /login <password>
+  register:
+    description: Register a new account.
+    usage: /register <password>
+  setspawn:
+    description: Set the spawn location.
+    usage: /setspawn
+    permission: bettertplogin.setspawn
+  reset-password:
+    description: Reset your password.
+    usage: /reset-password <currentPassword> <newPassword>
