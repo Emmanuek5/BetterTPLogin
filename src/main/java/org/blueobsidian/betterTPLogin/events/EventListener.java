@@ -12,16 +12,22 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.*;
+import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
 public class EventListener implements Listener {
     private static final String PREFIX = ChatColor.BLUE + "[BetterTPLogin] " + ChatColor.RESET;
     private static final int SPAWN_RADIUS = 4;
+    private static final int LOGIN_TIMEOUT = 60; // in seconds
+    private static final int REMINDER_INTERVAL = 5; // in seconds
     private final Random random = new Random();
     private final BetterTPLogin plugin;
     private final PlayerManager playerManager;
+    private final Map<UUID, BukkitRunnable> loginTasks = new HashMap<>();
 
     public EventListener(BetterTPLogin plugin) {
         this.plugin = plugin;
@@ -31,38 +37,98 @@ public class EventListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        String ipAddress = player.getAddress().getAddress().getHostAddress();
         UUID playerId = player.getUniqueId();
-        PlayerData data = playerManager.getPlayerData(playerId);
 
-        if (data == null) {
+        if (playerManager.getPlayerData(playerId) == null) {
             handleNewPlayer(player);
-        } else if (playerManager.isValidIpAddress(playerId, ipAddress)) {
-            handleAutoLogin(player, data);
         } else {
             handleReturnPlayer(player);
         }
+
+        // Start login timer and reminders
+        startLoginTimer(player);
     }
+
+    private void startLoginTimer(Player player) {
+        UUID playerId = player.getUniqueId();
+        BukkitRunnable loginTask = new BukkitRunnable() {
+            int timeLeft = LOGIN_TIMEOUT;
+
+            @Override
+            public void run() {
+                if (playerManager.isLoggedIn(playerId)) {
+                    clearScreenMessage(player);
+                    cancel();
+                    loginTasks.remove(playerId);
+                    return;
+                }
+
+                if (timeLeft <= 0) {
+                    player.kickPlayer(ChatColor.RED + "You were kicked for not logging in or registering within 60 seconds.");
+                    clearScreenMessage(player);
+                    cancel();
+                    loginTasks.remove(playerId);
+                    return;
+                }
+
+                // Display login/register messages
+                boolean needsRegistration = playerManager.getPlayerData(playerId) == null;
+                displayLoginScreen(player, needsRegistration, timeLeft);
+
+                timeLeft--;
+            }
+        };
+
+        loginTasks.put(playerId, loginTask);
+        loginTask.runTaskTimer(plugin, 0, 20); // 20 ticks = 1 second
+    }
+
+
+    private void displayLoginScreen(Player player, boolean needsRegistration, int countdown) {
+        String title = needsRegistration
+                ? ChatColor.GOLD + "Please Register"
+                : ChatColor.GOLD + "Please Login";
+
+        String subtitle = needsRegistration
+                ? ChatColor.YELLOW + "Use /register <password>"
+                : ChatColor.YELLOW + "Use /login <password>";
+
+        String actionBarMessage = ChatColor.RED + "Time left: " + countdown + " seconds";
+
+        // Display title and subtitle
+        player.sendTitle(title, subtitle, 10, 20, 10);
+
+        // Display countdown on the action bar
+        player.spigot().sendMessage(net.md_5.bungee.api.chat.TextComponent.fromLegacyText(actionBarMessage));
+    }
+
+    private void clearScreenMessage(Player player) {
+        // Clear any lingering messages by sending an empty title and action bar
+        player.sendTitle("", "", 0, 0, 0);
+        player.spigot().sendMessage(net.md_5.bungee.api.chat.TextComponent.fromLegacyText(""));
+    }
+
 
     private void handleNewPlayer(Player player) {
         Location spawnLoc = getRandomSpawnLocation();
         player.teleport(spawnLoc);
-        displayAuthMessage(player, true);
+        displayLoginScreen(player, true, LOGIN_TIMEOUT);
         playerManager.setLoggedIn(player.getUniqueId(), false);
     }
 
+    private void handleReturnPlayer(Player player) {
+        Location spawnLoc = getRandomSpawnLocation();
+        player.teleport(spawnLoc);
+        displayLoginScreen(player, false, LOGIN_TIMEOUT);
+        playerManager.setLoggedIn(player.getUniqueId(), false);
+    }
     private void handleAutoLogin(Player player, PlayerData data) {
         player.teleport(data.getLastKnownLocation());
         playerManager.setLoggedIn(player.getUniqueId(), true);
         sendMessage(player, ChatColor.GREEN + "You've been automatically logged in!");
     }
 
-    private void handleReturnPlayer(Player player) {
-        Location spawnLoc = getRandomSpawnLocation();
-        player.teleport(spawnLoc);
-        displayAuthMessage(player, false);
-        playerManager.setLoggedIn(player.getUniqueId(), false);
-    }
+
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerQuit(PlayerQuitEvent event) {
