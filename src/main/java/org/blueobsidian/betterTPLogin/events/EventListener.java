@@ -38,11 +38,17 @@ public class EventListener implements Listener {
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         UUID playerId = player.getUniqueId();
+        String ipAddress = player.getAddress().getAddress().getHostAddress();
 
         if (playerManager.getPlayerData(playerId) == null) {
             handleNewPlayer(player);
         } else {
-            handleReturnPlayer(player);
+            if (!playerManager.isValidIpAddress(playerId, ipAddress)) {
+              handleReturnPlayer(player);
+            }else {
+                displayAutoLoginScreen(player);
+                handleAutoLogin(player, playerManager.getPlayerData(playerId));
+            }
         }
 
         // Start login timer and reminders
@@ -84,10 +90,16 @@ public class EventListener implements Listener {
     }
 
 
+
+private void displayAutoLoginScreen(Player player) {
+    String title = ChatColor.GOLD + "You've been automatically logged in!";
+    player.sendTitle(title, "", 10, 20, 10);
+
+}
     private void displayLoginScreen(Player player, boolean needsRegistration, int countdown) {
         String title = needsRegistration
-                ? ChatColor.GOLD + "Please Register"
-                : ChatColor.GOLD + "Please Login";
+                ? ChatColor.GOLD + "Please Register To Continue"
+                : ChatColor.GOLD + "Please Login To Continue";
 
         String subtitle = needsRegistration
                 ? ChatColor.YELLOW + "Use /register <password>"
